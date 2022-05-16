@@ -1,0 +1,144 @@
+﻿@page "/fetchdata"
+@using Infoshare22.WebApp.Shared
+@using System.Net.Http
+@using System.Net.Http.Json
+@inject IHttpClientFactory ClientFactory
+
+
+<PageTitle>Infoshare22</PageTitle>
+
+<MudText Typo="Typo.h3" GutterBottom="true">Let's convert some transactions</MudText>
+
+@if (transactions == null)
+{
+    <MudProgressCircular Color="Color.Default" Indeterminate="true" />
+}
+else
+{
+    <MudButton @onclick="@(async () => await Convert())">Convert</MudButton>
+    <MudButton @onclick="@(async () => await RefreshAll())">Refresh</MudButton>
+    <MudButton @onclick="@(async () => await Reset())">Reset</MudButton>
+    <MudTable Items="transactions" Hover="true" SortLabel="Sort By" Elevation="0">
+        <HeaderContent>
+            <MudTh><MudTableSortLabel SortBy="new Func<Transaction, object>(x=>x.Id!)">Id</MudTableSortLabel></MudTh>
+            <MudTh><MudTableSortLabel InitialDirection="SortDirection.Ascending" SortBy="new Func<Transaction, object>(x=>x.Date)">Date</MudTableSortLabel></MudTh>
+            <MudTh><MudTableSortLabel SortBy="new Func<Transaction, object>(x=>x.Amount)">Amount</MudTableSortLabel></MudTh>
+            <MudTh><MudTableSortLabel SortBy="new Func<Transaction, object>(x=>x.Currency!)">Currency</MudTableSortLabel></MudTh>
+            <MudTh><MudTableSortLabel SortBy="new Func<Transaction, object>(x=>x.AmountPLN!)">AmountPLN</MudTableSortLabel></MudTh>
+            <MudTh><MudTableSortLabel SortBy="new Func<Transaction, object>(x=>x.Status!)">Status</MudTableSortLabel></MudTh>
+            <MudTh>Convert</MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd DataLabel="Date">@context.Id</MudTd>
+            <MudTd DataLabel="Date">@context.Date</MudTd>
+            <MudTd DataLabel="Amount">@context.Amount</MudTd>
+            <MudTd DataLabel="Currency">@context.Currency</MudTd>
+            <MudTd DataLabel="Amount PLN">@context.AmountPLN.ToString("#.##")</MudTd>
+            <MudTd DataLabel="Status">
+                @if(context.Status == ConversionStatus.Sent)
+                {
+                    <MudIcon Icon="@Icons.Filled.ArrowForward" Color="Color.Primary" />
+                }
+                else if (context.Status == ConversionStatus.Converted)
+                {
+                    <MudIcon Icon="@Icons.Filled.Check" Color="Color.Success" />
+                }
+            </MudTd>
+            <MudTh><MudButton @onclick="@(async () => await ConvertSingle(context))">Convert</MudButton></MudTh>
+        </RowTemplate>
+        <PagerContent>
+            <MudTablePager PageSizeOptions="new int[]{50, 100}" />
+        </PagerContent>
+    </MudTable>
+}
+
+@code {
+
+    private Transaction[]? transactions;
+    private HttpClient functions = default!;
+
+
+    protected override async Task OnInitializedAsync()
+    {
+        functions = ClientFactory.CreateClient("Functions");
+        await Reset();
+    }
+
+    public async Task Reset()
+    {
+        transactions = await ClientFactory.CreateClient("Blazor").GetFromJsonAsync<Transaction[]>("sample-data/transactions.json");
+    }
+
+    public async Task ConvertSingle(Transaction t)
+    {
+        await functions.PostAsJsonAsync("api/SendToQueue", new
+        {
+            id = t.Id,
+            amount = t.Amount,
+            currency = t.Currency
+        });
+        t.Status = ConversionStatus.Sent;
+
+        StateHasChanged();
+    }
+
+    public async Task Convert()
+    {
+        foreach(var transaction in transactions!)
+        {
+            await functions.PostAsJsonAsync("api/SendToQueue", new
+            {
+                id = transaction.Id,
+                amount = transaction.Amount,
+                currency = transaction.Currency
+            });
+            transaction.Status = ConversionStatus.Sent;
+
+            StateHasChanged();
+            await Task.Delay(250);
+        }
+    }
+    public async Task RefreshAll()
+    {
+        while(await Refresh())
+        {
+            StateHasChanged();
+            await Task.Delay(250);
+        }
+    }
+
+    public async Task<bool> Refresh()
+    {
+        var httpResponse = await functions.GetAsync("api/FetchResults");
+        if(httpResponse.StatusCode == System.Net.HttpStatusCode.OK)
+        {
+            Transaction? result = await httpResponse!.Content.ReadFromJsonAsync<Transaction>();
+            var t = transactions!.Single(y => y.Id == result!.Id);
+            t.AmountPLN = result!.AmountPLN;
+            t.Status = ConversionStatus.Converted;
+            return true;
+        }
+        return false;
+    }
+
+    public class Transaction
+    {
+        public string? Id { get; set; }
+
+        public DateTime Date { get; set; }
+
+        public decimal Amount { get; set; }
+
+        public string? Currency { get; set; }
+
+        public decimal AmountPLN { get; set; }
+
+        public ConversionStatus? Status { get; set; }
+    }
+    public enum ConversionStatus
+    {
+        Sent,
+        Converted
+    }
+
+}
