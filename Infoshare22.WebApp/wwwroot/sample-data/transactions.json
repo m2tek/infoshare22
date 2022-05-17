@@ -28,5 +28,17 @@
     "date": "2018-05-10",
     "amount": 9999.99,
     "currency": "EUR"
+  },
+  {
+    "id": "6",
+    "date": "2018-05-11",
+    "amount": 1111,
+    "currency": "USD"
+  },
+  {
+    "id": "7",
+    "date": "2018-05-12",
+    "amount": 0.10,
+    "currency": "EUR"
   }
 ]
