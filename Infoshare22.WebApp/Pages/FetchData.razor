@@ -16,7 +16,7 @@
 else
 {
     <MudButton @onclick="@(async () => await Convert())">Convert</MudButton>
-    <MudButton @onclick="@(async () => await RefreshAll())">Refresh</MudButton>
+    <MudButton @onclick="@(async () => await FetchAll())">Fetch</MudButton>
     <MudButton @onclick="@(async () => await Reset())">Reset</MudButton>
     <MudTable Items="transactions" Hover="true" SortLabel="Sort By" Elevation="0">
         <HeaderContent>
@@ -64,7 +64,7 @@ else
         await Reset();
     }
 
-    public async Task Reset()
+    private async Task Reset()
     {
         transactions = await ClientFactory.CreateClient("Blazor").GetFromJsonAsync<Transaction[]>("sample-data/transactions.json");
     }
@@ -94,20 +94,18 @@ else
             });
             transaction.Status = ConversionStatus.Sent;
 
-            StateHasChanged();
-            await Task.Delay(250);
+            await RefreshState();    
         }
     }
-    public async Task RefreshAll()
+    public async Task FetchAll()
     {
-        while(await Refresh())
+        while(await Fetch())
         {
-            StateHasChanged();
-            await Task.Delay(250);
+            await RefreshState();    
         }
     }
 
-    public async Task<bool> Refresh()
+    private async Task<bool> Fetch()
     {
         var httpResponse = await functions.GetAsync("api/FetchResults");
         if(httpResponse.StatusCode == System.Net.HttpStatusCode.OK)
@@ -119,6 +117,12 @@ else
             return true;
         }
         return false;
+    }
+
+    private async Task RefreshState()
+    {
+        StateHasChanged();
+        await Task.Delay(200);
     }
 
     public class Transaction
@@ -135,6 +139,7 @@ else
 
         public ConversionStatus? Status { get; set; }
     }
+
     public enum ConversionStatus
     {
         Sent,
